@@ -1,0 +1,71 @@
+version: '3'
+
+volumes:
+  local_postgres_data: {}
+  local_postgres_data_backups: {}
+
+services:
+  # redis:
+  #   restart: always
+  #   image: "redis:alpine"
+  #   hostname: redis
+  #   container_name: redis
+  #   ports:
+  #     - '6379:6379'
+  
+  backend:
+    restart: always
+    build:
+      context: ./django_cache
+      dockerfile: ./Dockerfile      
+    command: bash -c "gunicorn django_cache.wsgi --bind 0.0.0.0:8000"
+    container_name: backend
+    image: backend_image
+    volumes:
+      - ./django_cache:/backend
+    ports:
+      - '8000:8000'
+    # links:
+    #   - redis
+    # depends_on:
+    #   - redis
+
+  postgres:
+    build:
+      context: .
+      dockerfile: ./compose/production/postgres/Dockerfile
+    image: wakili_production_postgres
+    container_name: postgres
+    volumes:
+      - local_postgres_data:/var/lib/postgresql/data:Z
+      - local_postgres_data_backups:/backups:z
+    env_file:
+      - ./.envs/.local/.postgres
+
+  vue:
+    restart: always
+    build:  
+      context: ./vue_frontend
+      dockerfile: ./Dockerfile
+    container_name: vue
+    image: client_image
+    depends_on:
+      - backend
+    volumes:
+      - ./vue_frontend:/frontend
+    ports:
+      - 80:80
+    
+  nginx:
+    build: ./vue_frontend/nginx
+    image: nginx:1.17.10
+    container_name: nginx
+    image: nginx
+    depends_on:
+          - vue
+          - backend
+    volumes:
+        - ./vue_frontend/nginx/nginx.conf:/etc/nginx/nginx.conf
+    ports:
+        - 80:80
+    
